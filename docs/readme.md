@@ -112,11 +112,4 @@ We welcome contributions! Feel free to:
 
 ---
 
-## 📜 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-> Made with ❤️ by the DevOps & Cloud Engineering Team
 
