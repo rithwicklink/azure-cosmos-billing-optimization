@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Create Blob Storage account and container
+az storage account create --name billingarchives --resource-group myResourceGroup --location eastus --sku Standard_LRS
+az storage container create --name billing-archives --account-name billingarchives
+
+# Create Cosmos DB containers
+az cosmosdb sql container create --account-name mycosmosdb --resource-group myResourceGroup --database-name BillingDB --name BillingRecords --partition-key-path /id
+az cosmosdb sql container create --account-name mycosmosdb --resource-group myResourceGroup --database-name BillingDB --name Metadata --partition-key-path /id
+
+# Deploy Azure Functions
+az functionapp create --name BillingArchival --resource-group myResourceGroup --consumption-plan-location eastus --runtime python --runtime-version 3.8
+az functionapp create --name BillingRetrieval --resource-group myResourceGroup --consumption-plan-location eastus --runtime python --runtime-version 3.8
+
+# Set Cosmos DB indexing policy
+az cosmosdb sql container update --account-name mycosmosdb --resource-group myResourceGroup --database-name BillingDB --name BillingRecords --indexing-policy ./indexing_policy.json
+
+# Configure API Management (simplified)
+az apim create --name billing-apim --resource-group myResourceGroup --publisher-name MyOrg --publisher-email admin@myorg.com
+az apim api import --name billing-apim --resource-group myResourceGroup --path /billing --service-url http://BillingRetrieval.azurewebsites.net
+
+# Set Cost Management budget
+az costmanagement budget create --name cosmos-budget --resource-group myResourceGroup --amount 500 --time-grain monthly --category Cost --scope /subscriptions/your-subscription-id

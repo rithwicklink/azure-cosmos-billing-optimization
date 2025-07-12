@@ -1,0 +1,41 @@
+variable "resource_group_name" {
+  description = "Name of the resource group"
+  type        = string
+  default     = "billing-optimization-rg"
+}
+
+variable "location" {
+  description = "Azure region for resources"
+  type        = string
+  default     = "eastus"
+}
+
+variable "cosmos_db_account_name" {
+  description = "Name of the Cosmos DB account"
+  type        = string
+  default     = "billing-cosmosdb"
+}
+
+variable "storage_account_name" {
+  description = "Name of the storage account"
+  type        = string
+  default     = "billingarchives"
+}
+
+variable "function_app_name_archive" {
+  description = "Name of the archival function app"
+  type        = string
+  default     = "billing-archival"
+}
+
+variable "function_app_name_retrieve" {
+  description = "Name of the retrieval function app"
+  type        = string
+  default     = "billing-retrieval"
+}
+
+variable "apim_name" {
+  description = "Name of the API Management instance"
+  type        = string
+  default     = "billing-apim"
+}

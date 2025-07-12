@@ -1,0 +1,24 @@
+output "cosmosdb_endpoint" {
+  description = "Cosmos DB endpoint"
+  value       = azurerm_cosmosdb_account.cosmosdb.endpoint
+}
+
+output "storage_account_name" {
+  description = "Storage account name"
+  value       = azurerm_storage_account.storage.name
+}
+
+output "function_app_archive_hostname" {
+  description = "Archival function app hostname"
+  value       = azurerm_function_app.archive.default_hostname
+}
+
+output "function_app_retrieve_hostname" {
+  description = "Retrieval function app hostname"
+  value       = azurerm_function_app.retrieve.default_hostname
+}
+
+output "apim_gateway_url" {
+  description = "API Management gateway URL"
+  value       = azurerm_api_management.apim.gateway_url
+}

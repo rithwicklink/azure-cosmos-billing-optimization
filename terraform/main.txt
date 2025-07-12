@@ -1,0 +1,234 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = ">= 3.0.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+# Variables
+variable "resource_group_name" {
+  description = "Name of the resource group"
+  type        = string
+  default     = "billing-optimization-rg"
+}
+
+variable "location" {
+  description = "Azure region for resources"
+  type        = string
+  default     = "eastus"
+}
+
+variable "cosmos_db_account_name" {
+  description = "Name of the Cosmos DB account"
+  type        = string
+  default     = "billing-cosmosdb"
+}
+
+variable "storage_account_name" {
+  description = "Name of the storage account"
+  type        = string
+  default     = "billingarchives"
+}
+
+variable "function_app_name_archive" {
+  description = "Name of the archival function app"
+  type        = string
+  default     = "billing-archival"
+}
+
+variable "function_app_name_retrieve" {
+  description = "Name of the retrieval function app"
+  type        = string
+  default     = "billing-retrieval"
+}
+
+variable "apim_name" {
+  description = "Name of the API Management instance"
+  type        = string
+  default     = "billing-apim"
+}
+
+# Resource Group
+resource "azurerm_resource_group" "rg" {
+  name     = var.resource_group_name
+  location = var.location
+}
+
+# Cosmos DB Account (Serverless)
+resource "azurerm_cosmosdb_account" "cosmosdb" {
+  name                = var.cosmos_db_account_name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  offer_type          = "Standard"
+  kind                = "GlobalDocumentDB"
+  capabilities {
+    name = "EnableServerless"
+  }
+  geo_location {
+    location          = azurerm_resource_group.rg.location
+    failover_priority = 0
+  }
+  consistency_policy {
+    consistency_level = "Session"
+  }
+}
+
+# Cosmos DB Database
+resource "azurerm_cosmosdb_sql_database" "database" {
+  name                = "BillingDB"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.cosmosdb.name
+}
+
+# Cosmos DB Containers
+resource "azurerm_cosmosdb_sql_container" "billing_records" {
+  name                = "BillingRecords"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.cosmosdb.name
+  database_name       = azurerm_cosmosdb_sql_database.database.name
+  partition_key_path  = "/id"
+  indexing_policy {
+    indexing_mode = "consistent"
+    included_path {
+      path = "/id/?"
+    }
+    included_path {
+      path = "/timestamp/?"
+    }
+    excluded_path {
+      path = "/*"
+    }
+  }
+}
+
+resource "azurerm_cosmosdb_sql_container" "metadata" {
+  name                = "Metadata"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.cosmosdb.name
+  database_name       = azurerm_cosmosdb_sql_database.database.name
+  partition_key_path  = "/id"
+}
+
+# Storage Account for Blob Storage
+resource "azurerm_storage_account" "storage" {
+  name                     = var.storage_account_name
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  access_tier              = "Cool"
+}
+
+# Blob Storage Container
+resource "azurerm_storage_container" "billing_archives" {
+  name                  = "billing-archives"
+  storage_account_name  = azurerm_storage_account.storage.name
+  container_access_type = "private"
+}
+
+# App Service Plan for Functions (Consumption Plan)
+resource "azurerm_app_service_plan" "function_plan" {
+  name                = "billing-functions-plan"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  kind                = "FunctionApp"
+  sku {
+    tier = "Dynamic"
+    size = "Y1"
+  }
+}
+
+# Function Apps
+resource "azurerm_function_app" "archive" {
+  name                       = var.function_app_name_archive
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  app_service_plan_id        = azurerm_app_service_plan.function_plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+  os_type                    = "linux"
+  version                    = "~4"
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME"     = "python"
+    "COSMOS_ENDPOINT"              = azurerm_cosmosdb_account.cosmosdb.endpoint
+    "COSMOS_KEY"                   = azurerm_cosmosdb_account.cosmosdb.primary_key
+    "BLOB_CONNECTION_STRING"       = azurerm_storage_account.storage.primary_connection_string
+  }
+}
+
+resource "azurerm_function_app" "retrieve" {
+  name                       = var.function_app_name_retrieve
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  app_service_plan_id        = azurerm_app_service_plan.function_plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+  os_type                    = "linux"
+  version                    = "~4"
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME"     = "python"
+    "COSMOS_ENDPOINT"              = azurerm_cosmosdb_account.cosmosdb.endpoint
+    "COSMOS_KEY"                   = azurerm_cosmosdb_account.cosmosdb.primary_key
+    "BLOB_CONNECTION_STRING"       = azurerm_storage_account.storage.primary_connection_string
+  }
+}
+
+# API Management
+resource "azurerm_api_management" "apim" {
+  name                = var.apim_name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  publisher_name      = "MyOrg"
+  publisher_email     = "admin@myorg.com"
+  sku_name            = "Developer_1"
+}
+
+resource "azurerm_api_management_api" "billing_api" {
+  name                = "billing-api"
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg.name
+  revision            = "1"
+  display_name        = "Billing API"
+  path                = "billing"
+  protocols           = ["https"]
+  service_url         = "https://${azurerm_function_app.retrieve.default_hostname}/api"
+}
+
+# Cost Management Budget
+resource "azurerm_consumption_budget_resource_group" "budget" {
+  name                = "cosmos-budget"
+  resource_group_id   = azurerm_resource_group.rg.id
+  amount              = 500
+  time_grain          = "Monthly"
+  time_period {
+    start_date = "2025-07-01T00:00:00Z"
+    end_date   = "2026-07-01T00:00:00Z"
+  }
+}
+
+# Outputs
+output "cosmosdb_endpoint" {
+  value = azurerm_cosmosdb_account.cosmosdb.endpoint
+}
+
+output "storage_account_name" {
+  value = azurerm_storage_account.storage.name
+}
+
+output "function_app_archive_hostname" {
+  value = azurerm_function_app.archive.default_hostname
+}
+
+output "function_app_retrieve_hostname" {
+  value = azurerm_function_app.retrieve.default_hostname
+}
+
+output "apim_gateway_url" {
+  value = azurerm_api_management.apim.gateway_url
+}
