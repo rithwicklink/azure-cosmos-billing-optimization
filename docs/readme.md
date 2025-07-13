@@ -104,7 +104,7 @@ func azure functionapp publish billing-retrieval
 
 ## 🔗 Related Resources
 
-- 🤖 **Grok Conversation on this Topic (Grok AI chat coversation link):** [View Discussion](https://grok.com/share/c2hhcmQtMw%3D%3D_da5dc2cb-056e-4ea0-b938-45ce16399971)
+- 🤖 **Grok Conversation on this Topic (Grok AI chat coversation link):** [View Discussion](https://grok.com/share/c2hhcmQtMw%3D%3D_a55e9872-ba50-4314-8c7b-d5f29392461b)
 
 ---
 
